@@ -1,18 +1,66 @@
+# Smoke-Test und Veröffentlichung.
+#
+# Smoke-Test: lädt die App in jsdom und prüft die Kernabläufe, dazu die Verdrahtung der
+# Seite (tests/seite.test.mjs). Läuft bei jedem Push und bei Pull Requests.
+#
+# Veröffentlichung: nur für master und nur nach grünem Test. Ein roter Lauf hält sie auf,
+# die Seite bleibt dann auf dem letzten guten Stand. Hochgeladen werden allein die Dateien
+# der Seite. Einrichtungsanleitung, Skripte und package.json bleiben im Repository.
+# Das Repository ändert der Lauf nicht.
 name: Smoke-Test
 
 on:
   push:
-    branches: [ master, main ]
+    branches: [ master ]
   pull_request: {}
-  workflow_dispatch: {}
+  workflow_dispatch: {}   # manueller Lauf über den Actions-Tab, veröffentlicht master neu
+
+# Nur lesen: Der Lauf braucht keine Schreibrechte am Repository.
+permissions:
+  contents: read
 
 jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0, auf den Commit festgelegt
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020   # v4.4.0
         with:
           node-version: '22'
-      - run: npm install
+      - run: npm ci --no-audit --no-fund
       - run: npm run smoke
+      - name: Verdrahtung der Seite (Veröffentlichung)
+        run: node tests/seite.test.mjs
+
+  veroeffentlichen:
+    needs: smoke
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    # Nur dieser Job darf veröffentlichen, und nur das.
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    # Zwei Pushes kurz nacheinander: nacheinander veröffentlichen, keinen Lauf abbrechen.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+
+      # Nur was die Seite braucht. Alles andere bleibt im Repository.
+      - name: Dateien der Seite zusammenstellen
+        run: |
+          mkdir _site
+          cp -r index.html CNAME app.js style.css assets _site/
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9   # v5.0.0
+        with:
+          path: _site
+
+      - name: Veröffentlichen
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346   # v5.0.1
