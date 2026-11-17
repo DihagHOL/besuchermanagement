@@ -82,7 +82,7 @@ async function fakeFetch(url, opts) {
   return resp({});
 }
 
-// MSAL-Stub: sofort als Admin fedorov@dihag.com angemeldet
+// MSAL-Stub: sofort als Admin administrator@dihag.com angemeldet
 class FakePCA {
   constructor(){}
   async initialize(){}
